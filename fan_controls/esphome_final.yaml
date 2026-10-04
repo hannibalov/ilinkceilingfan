@@ -1,0 +1,685 @@
+# Transmitter firmware for the ESP32 with the CC1101 433 MHz transceiver.
+#
+# Bedroom Fan + Living Room Fan
+#
+# Controls:
+#   Fan Speed:
+#     Off
+#     Speed 1
+#     Speed 2
+#     Speed 3
+#     Speed 4
+#     Speed 5
+#     Speed 6
+#
+#   Fan Mode:
+#     Summer = Forward
+#     Winter = Reverse
+#
+#   Breeze:
+#     Separate button
+#
+# ESPHome version: 2026.7.4
+
+
+esphome:
+  name: fan-control
+
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+
+logger:
+
+
+api:
+
+
+wifi:
+  ssid: "SercommDB48"
+  password: "SFUGQZUBB9EYBZ"
+
+
+# ============================================================================
+# CC1101 / SPI
+# ============================================================================
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+  miso_pin: GPIO19
+
+
+cc1101:
+  cs_pin: GPIO5
+  frequency: 433.92MHz
+  modulation_type: ASK/OOK
+
+  # Do NOT add gdo0_pin here.
+  #
+  # The remote_transmitter pin below owns GDO0 exclusively.
+
+
+remote_transmitter:
+  - id: my_tx
+    pin: GPIO4
+    carrier_duty_percent: 100%
+    non_blocking: true
+
+    on_transmit:
+      then:
+        - cc1101.begin_tx
+
+    on_complete:
+      then:
+        - cc1101.begin_rx
+
+
+# Optional loopback receiver, same CC1101 (GDO2).
+# Useful for cross-validating that a transmission actually went out.
+
+remote_receiver:
+  - id: my_rx
+    pin:
+      number: GPIO2
+      inverted: false
+    dump: raw
+    tolerance: 25%
+    buffer_size: 10kb
+    filter: 100us
+    idle: 10ms
+
+
+# ============================================================================
+# RF TRANSMISSION SCRIPTS
+# ============================================================================
+
+script:
+
+  # --------------------------------------------------------------------------
+  # BEDROOM FAN - REMOTE A
+  # --------------------------------------------------------------------------
+
+  - id: send_a_fanoff
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [250, -750, 770, -250, 260, -750, 770, -240, 270, -750, 760, -240,
+            780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -750, 780, -240, 260, -760, 760, -240, 280, -750, 260, -740,
+            270, -750, 260, -760, 770, -230, 260, -760, 770, -240, 780, -240,
+            260, -750, 760, -240, 780, -240, 260, -750, 760, -240, 770, -250,
+            760, -250, 760, -250, 270]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_speed1
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [260, -760, 770, -230, 270, -740, 760, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -750, 780, -240, 270, -750, 750, -240, 280, -730, 270, -760,
+            270, -730, 270, -750, 760, -250, 270, -750, 260, -750, 270, -750,
+            260, -750, 250, -770, 770, -240, 770, -240, 780, -240, 260, -750,
+            260, -750, 770, -240, 280]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_speed2
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [260, -750, 760, -260, 260, -750, 770, -240, 250, -750, 770, -240,
+            780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -750, 770, -240, 280, -740, 760, -250, 270, -750, 250, -750,
+            270, -750, 250, -770, 770, -240, 250, -770, 250, -750, 780, -240,
+            260, -760, 250, -740, 780, -240, 750, -270, 760, -250, 260, -750,
+            260, -750, 260, -770, 250]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_speed3
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -730, 790, -220, 260, -750, 770, -240, 270, -750, 750, -240,
+            780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -750, 760, -240, 270, -750, 760, -240, 280, -750, 270, -760,
+            270, -740, 270, -750, 770, -250, 760, -240, 760, -250, 260, -750,
+            260, -760, 760, -250, 270, -750, 250, -750, 760, -250, 260, -750,
+            260, -740, 260, -760, 260]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_speed4
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -760, 760, -250, 260, -740, 780, -240, 280, -750, 780, -240,
+            780, -240, 260, -750, 760, -240, 780, -240, 760, -240, 260, -750,
+            260, -750, 780, -240, 280, -730, 770, -250, 260, -760, 270, -730,
+            270, -750, 260, -760, 260, -750, 760, -260, 250, -750, 770, -240,
+            260, -750, 770, -240, 270, -740, 780, -240, 280, -750, 250, -740,
+            780, -240, 280, -740, 280]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_speed5
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -740, 770, -240, 270, -750, 780, -240, 280, -750, 750, -240,
+            780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -750, 780, -240, 270, -750, 760, -240, 280, -750, 260, -740,
+            280, -740, 270, -740, 270, -740, 770, -220, 770, -240, 780, -240,
+            760, -250, 760, -250, 770, -250, 260, -750, 760, -240, 280, -750,
+            760, -240, 780, -240, 260]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_speed6
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [280, -740, 770, -240, 280, -750, 750, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -750, 770, -240, 280, -750, 750, -240, 280, -740, 270, -750,
+            270, -740, 260, -760, 260, -760, 760, -240, 760, -240, 280, -750,
+            260, -750, 770, -240, 770, -240, 770, -250, 260, -760, 270, -730,
+            770, -260, 770, -250, 270]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_f
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [260, -750, 760, -240, 260, -760, 760, -240, 250, -770, 770, -240,
+            750, -270, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -750, 780, -240, 250, -760, 760, -240, 250, -770, 250, -740,
+            280, -740, 250, -770, 250, -770, 250, -760, 750, -240, 270, -760,
+            250, -750, 780, -240, 250, -770, 250, -750, 280, -740, 770, -240,
+            250, -770, 250, -770, 250]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_r
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -750, 770, -220, 260, -740, 780, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -740, 780, -240, 280, -730, 770, -250, 270, -750, 260, -750,
+            270, -750, 260, -760, 760, -240, 270, -740, 270, -750, 250, -770,
+            770, -260, 780, -230, 280, -730, 760, -240, 280, -750, 770, -240,
+            780, -240, 760, -250, 270]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_a_wave
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -760, 760, -240, 260, -750, 780, -240, 250, -760, 760, -240,
+            770, -250, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -770, 760, -240, 280, -750, 760, -240, 280, -740, 260, -760,
+            260, -750, 250, -750, 770, -250, 260, -750, 780, -240, 260, -750,
+            760, -240, 780, -240, 760, -240, 260, -750, 260, -750, 780, -240,
+            750, -270, 260, -750, 260]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  # --------------------------------------------------------------------------
+  # LIVING ROOM FAN - REMOTE B
+  # --------------------------------------------------------------------------
+
+  - id: send_b_fanoff
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -740, 770, -240, 270, -750, 770, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 260, -770, 250, -740, 780, -240, 780, -240,
+            260, -760, 760, -240, 270, -740, 260, -760, 260, -760, 760, -240,
+            770, -240, 260, -760, 770, -240, 270, -760, 760, -260, 770, -250,
+            270, -750, 260, -760, 260, -740, 270, -760, 270, -760, 250, -750,
+            780, -240, 780, -240, 260]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_b_f
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -740, 780, -240, 260, -750, 760, -240, 280, -740, 760, -240,
+            780, -240, 260, -750, 260, -750, 260, -740, 780, -240, 780, -240,
+            260, -750, 760, -240, 280, -760, 270, -730, 270, -760, 760, -270,
+            760, -260, 250, -750, 260, -750, 260, -750, 770, -250, 270, -750,
+            270, -750, 270, -760, 770, -240, 250, -770, 760, -240, 280, -750,
+            260, -750, 270, -750, 270]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_b_r
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -740, 790, -220, 280, -740, 760, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 260, -770, 250, -740, 780, -240, 780, -240,
+            260, -750, 760, -240, 280, -750, 250, -740, 280, -740, 780, -240,
+            780, -240, 260, -760, 760, -240, 270, -730, 270, -750, 270, -740,
+            770, -240, 270, -750, 760, -240, 780, -250, 770, -250, 260, -750,
+            760, -240, 780, -240, 260]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_b_wave
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [280, -740, 780, -240, 270, -750, 760, -240, 280, -740, 760, -240,
+            780, -250, 260, -750, 260, -760, 260, -750, 770, -240, 780, -240,
+            260, -750, 760, -240, 280, -750, 260, -750, 270, -740, 780, -240,
+            780, -240, 260, -750, 760, -240, 280, -750, 760, -240, 280, -740,
+            760, -240, 780, -250, 260, -750, 760, -240, 780, -240, 760, -250,
+            770, -250, 760, -270, 270]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  # --------------------------------------------------------------------------
+  # LIVING ROOM FAN - SPEED 1-6
+  # --------------------------------------------------------------------------
+
+  - id: send_b_speed1
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [280, -750, 770, -230, 270, -760, 760, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 260, -750, 250, -750, 780, -240, 780, -240,
+            260, -750, 760, -240, 280, -750, 260, -770, 250, -740, 780, -240,
+            780, -240, 260, -760, 770, -250, 270, -730, 280, -750, 270, -750,
+            270, -740, 770, -240, 270, -750, 760, -240, 280, -750, 760, -240,
+            280, -740, 760, -270, 260]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_b_speed2
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -750, 770, -240, 270, -750, 780, -240, 280, -750, 760, -240,
+            780, -240, 260, -760, 260, -750, 260, -750, 770, -240, 780, -240,
+            260, -750, 760, -240, 280, -750, 250, -740, 280, -740, 780, -240,
+            780, -240, 260, -760, 760, -240, 270, -750, 260, -750, 780, -240,
+            280, -750, 250, -770, 250, -740, 270, -750, 270, -750, 250, -760,
+            250, -750, 770, -240, 280]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_b_speed3
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [280, -750, 770, -240, 280, -750, 760, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 270, -730, 270, -750, 770, -260, 770, -250,
+            260, -750, 760, -250, 270, -750, 260, -760, 250, -750, 770, -250,
+            770, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+            260, -770, 260, -750, 270, -750, 780, -240, 280, -750, 760, -240,
+            780, -240, 760, -270, 240]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_b_speed4
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -750, 770, -240, 280, -740, 760, -240, 280, -750, 760, -240,
+            780, -240, 260, -770, 250, -740, 780, -240, 780, -240, 260, -750,
+            760, -240, 280, -750, 260, -750, 270, -740, 770, -240, 780, -220,
+            270, -750, 260, -740, 780, -240, 280, -730, 770, -250, 280, -750,
+            270, -760, 270, -740, 270, -740, 780, -240, 780, -240, 280, -740,
+            780, -240, 260]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_b_speed5
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -750, 770, -240, 270, -750, 780, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 260, -750, 280, -750, 770, -240, 780, -240,
+            260, -750, 760, -240, 280, -750, 260, -770, 250, -740, 780, -240,
+            780, -240, 260, -750, 260, -750, 780, -240, 780, -240, 760, -250,
+            770, -250, 770, -250, 770, -250, 770, -250, 270, -750, 280, -750,
+            250, -750, 270, -740, 280]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+  - id: send_b_speed6
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -760, 770, -240, 270, -740, 760, -240, 280, -750, 760, -240,
+            780, -240, 260, -750, 260, -760, 270, -740, 780, -240, 780, -240,
+            260, -750, 760, -240, 280, -740, 260, -750, 270, -750, 780, -240,
+            780, -240, 260, -750, 260, -760, 760, -240, 770, -250, 260, -750,
+            270, -750, 270, -760, 770, -240, 770, -260, 760, -250, 760, -250,
+            260, -750, 760, -260, 260]
+          repeat:
+            times: !lambda "return repeat_count;"
+            wait_time: 8ms
+
+
+# ============================================================================
+# FAN SPEED SELECTORS
+# ============================================================================
+
+select:
+
+  # --------------------------------------------------------------------------
+  # BEDROOM FAN SPEED
+  # --------------------------------------------------------------------------
+
+  - platform: template
+    name: "Bedroom Fan"
+    id: bedroom_fan_speed
+    icon: "mdi:fan"
+
+    optimistic: true
+    restore_value: false
+    initial_option: "Off"
+
+    options:
+      - "Off"
+      - "Speed 1"
+      - "Speed 2"
+      - "Speed 3"
+      - "Speed 4"
+      - "Speed 5"
+      - "Speed 6"
+
+    set_action:
+      - lambda: |-
+          if (x == "Off") {
+            id(send_a_fanoff)->execute(6);
+          } else if (x == "Speed 1") {
+            id(send_a_speed1)->execute(6);
+          } else if (x == "Speed 2") {
+            id(send_a_speed2)->execute(6);
+          } else if (x == "Speed 3") {
+            id(send_a_speed3)->execute(6);
+          } else if (x == "Speed 4") {
+            id(send_a_speed4)->execute(6);
+          } else if (x == "Speed 5") {
+            id(send_a_speed5)->execute(6);
+          } else if (x == "Speed 6") {
+            id(send_a_speed6)->execute(6);
+          }
+
+
+  # --------------------------------------------------------------------------
+  # LIVING ROOM FAN SPEED
+  # --------------------------------------------------------------------------
+
+  - platform: template
+    name: "Living Room Fan"
+    id: living_room_fan_speed
+    icon: "mdi:fan"
+
+    optimistic: true
+    restore_value: false
+    initial_option: "Off"
+
+    options:
+      - "Off"
+      - "Speed 1"
+      - "Speed 2"
+      - "Speed 3"
+      - "Speed 4"
+      - "Speed 5"
+      - "Speed 6"
+
+    set_action:
+      - lambda: |-
+          if (x == "Off") {
+            id(send_b_fanoff)->execute(6);
+          } else if (x == "Speed 1") {
+            id(send_b_speed1)->execute(6);
+          } else if (x == "Speed 2") {
+            id(send_b_speed2)->execute(6);
+          } else if (x == "Speed 3") {
+            id(send_b_speed3)->execute(6);
+          } else if (x == "Speed 4") {
+            id(send_b_speed4)->execute(6);
+          } else if (x == "Speed 5") {
+            id(send_b_speed5)->execute(6);
+          } else if (x == "Speed 6") {
+            id(send_b_speed6)->execute(6);
+          }
+
+
+# ============================================================================
+# SUMMER / WINTER MODE
+# ============================================================================
+
+  # --------------------------------------------------------------------------
+  # BEDROOM FAN MODE
+  # --------------------------------------------------------------------------
+
+  - platform: template
+    name: "Bedroom Fan Mode"
+    id: bedroom_fan_mode
+    icon: "mdi:fan"
+
+    optimistic: true
+    restore_value: true
+    initial_option: "Summer"
+
+    options:
+      - "Summer"
+      - "Winter"
+
+    set_action:
+      - lambda: |-
+          if (x == "Summer") {
+            id(send_a_f)->execute(6);
+          } else if (x == "Winter") {
+            id(send_a_r)->execute(6);
+          }
+
+
+  # --------------------------------------------------------------------------
+  # LIVING ROOM FAN MODE
+  # --------------------------------------------------------------------------
+
+  - platform: template
+    name: "Living Room Fan Mode"
+    id: living_room_fan_mode
+    icon: "mdi:fan"
+
+    optimistic: true
+    restore_value: true
+    initial_option: "Summer"
+
+    options:
+      - "Summer"
+      - "Winter"
+
+    set_action:
+      - lambda: |-
+          if (x == "Summer") {
+            id(send_b_f)->execute(6);
+          } else if (x == "Winter") {
+            id(send_b_r)->execute(6);
+          }
+
+
+# ============================================================================
+# OTHER FAN CONTROLS
+# ============================================================================
+
+button:
+
+  # --------------------------------------------------------------------------
+  # BEDROOM FAN
+  # --------------------------------------------------------------------------
+
+  - platform: template
+    name: "Bedroom Fan Breeze"
+    icon: "mdi:weather-windy"
+
+    on_press:
+      - script.execute:
+          id: send_a_wave
+          repeat_count: 6
+
+
+  # --------------------------------------------------------------------------
+  # LIVING ROOM FAN
+  # --------------------------------------------------------------------------
+
+  - platform: template
+    name: "Living Room Fan Breeze"
+    icon: "mdi:weather-windy"
+
+    on_press:
+      - script.execute:
+          id: send_b_wave
+          repeat_count: 6
+
+
+# ============================================================================
+# NOTES
+# ============================================================================
+#
+# Remote A:
+#   Fan Off + Speed 1-6 were cross-validated via both up- and down-
+#   transitions on 2026-08-05. High confidence.
+#
+# Remote B:
+#   Speed 1-6 table resolved 2026-08-18.
+#   Levels 4 and 6 were directly re-captured.
+#   Levels 1/2/3/5 are based on the corrected sequence described in the
+#   original capture notes.
+#
+# F / R / Breeze:
+#   These are still single-sample captures from 2026-08-18.
+#   They remain provisional.
+#
+# Important:
+#   Remote A R and Remote B R share a button_id with Speed 1 on their
+#   respective remotes. This appears systematic across the two remotes,
+#   but has not been fully validated against the real fan.
+#
+# Summer / Winter:
+#   Summer = Forward
+#   Winter = Reverse
+#
+#   The physical fan handles stopping and reversing itself, including while
+#   the fan is running. No software interlock is therefore required.
+#
+# TODO:
+#   Power / Light / 1H / 4H / 8H for both remotes.
+#
+# ============================================================================

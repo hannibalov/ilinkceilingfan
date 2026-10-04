@@ -1,0 +1,631 @@
+# Transmitter firmware for the ESP32 with the CC1101 433 MHz transceiver.
+# See README.md "CC1101 Migration Plan" for wiring (SPI + GDO0/GDO2).
+#
+# Usage:
+#   python3 -m esphome run esphome_test.yaml --device /dev/cu.YOUR_ESP_PORT
+#
+# Codes below are the denoised captures from captures/parsed_results.md. Do NOT
+# hand-edit these arrays; regenerate them with tools/parse_capture.py from a
+# fresh capture if you need to re-verify one.
+#
+# Confidence varies by button — see captures/parsed_results.md and
+# captures/README.md for the full picture:
+#   - Remote A Fan Off + Speed 1-6: cross-validated via both up- and
+#     down-transitions (2026-08-05). High confidence.
+#   - Remote B Speed 1-6: resolved 2026-08-18 (levels 1/4/6 confirmed by
+#     direct single-button re-capture, 2/3/5 single-sample). High-ish
+#     confidence — see the note above send_b_speed1 for how an apparent
+#     collision turned out to be a dropped-press shift, not a real conflict.
+#   - Remote A F/R/≈ and Remote B Fan Off/F/R/≈: single-sample captures
+#     (2026-08-18). Provisional — see the CAUTION comment near the button:
+#     section below.
+#
+# CONFIRMED (2026-08-05): each speed button sends a code for the ABSOLUTE
+# target speed level, not a generic "step" — verified by capturing every
+# up AND down transition (1->2->3->4->5->6 and back) and finding the
+# button_id for a given target level is identical regardless of direction.
+# There is therefore no separate "tap"/"hold" distinction to model — one
+# button per level, that's it. See captures/parsed_results.md "COMPLETE —
+# Remote A speed level table" for the full evidence.
+#
+# For a standalone bench test that exercises Fan Off / Speed Down / Speed Up
+# without Home Assistant, use esphome_test_loop.yaml instead (still uses the
+# older tap-style codes — fine for a bench smoke test, but prefer the buttons
+# below for actual use).
+
+esphome:
+  name: fan-control
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+
+wifi:
+  ssid: "SercommDB48"
+  password: "SFUGQZUBB9EYBZ"
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+  miso_pin: GPIO19
+
+cc1101:
+  cs_pin: GPIO5
+  frequency: 433.92MHz
+  modulation_type: ASK/OOK
+  # Do NOT add gdo0_pin here — known ESPHome bug (esphome/esphome#16876):
+  # the cc1101 component's own pin_mode() call re-routes GDO0 back to plain
+  # GPIO, severing the RMT peripheral's connection and silently producing no
+  # RF. Let remote_transmitter's own `pin:` below own GDO0 exclusively.
+
+remote_transmitter:
+  - id: my_tx
+    pin: GPIO4  # CC1101 GDO0
+    carrier_duty_percent: 100%
+    non_blocking: true
+    on_transmit:
+      then:
+        - cc1101.begin_tx
+    on_complete:
+      then:
+        - cc1101.begin_rx
+
+# Optional loopback receiver, same CC1101 (GDO2) — useful for cross-validating
+# a transmission actually went out before testing against the real fan.
+remote_receiver:
+  - id: my_rx
+    pin:
+      number: GPIO2  # CC1101 GDO2
+      inverted: false
+    dump: raw
+    tolerance: 25%
+    buffer_size: 10kb
+    filter: 100us
+    idle: 10ms
+
+script:
+  - id: send_a_fanoff
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [250, -750, 770, -250, 260, -750, 770, -240, 270, -750, 760, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 780, -240, 260, -760, 760, -240, 280, -750, 260, -740,
+             270, -750, 260, -760, 770, -230, 260, -760, 770, -240, 780, -240,
+             260, -750, 760, -240, 780, -240, 260, -750, 760, -240, 770, -250,
+             760, -250, 760, -250, 270]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_speed1
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [260, -760, 770, -230, 270, -740, 760, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 780, -240, 270, -750, 750, -240, 280, -730, 270, -760,
+             270, -730, 270, -750, 760, -250, 270, -750, 260, -750, 270, -750,
+             260, -750, 250, -770, 770, -240, 770, -240, 780, -240, 260, -750,
+             260, -750, 770, -240, 280]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_speed2
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [260, -750, 760, -260, 260, -750, 770, -240, 250, -750, 770, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 770, -240, 280, -740, 760, -250, 270, -750, 250, -750,
+             270, -750, 250, -770, 770, -240, 250, -770, 250, -750, 780, -240,
+             260, -760, 250, -740, 780, -240, 750, -270, 760, -250, 260, -750,
+             260, -750, 260, -770, 250]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_speed3
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -730, 790, -220, 260, -750, 770, -240, 270, -750, 750, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 760, -240, 270, -750, 760, -240, 280, -750, 270, -760,
+             270, -740, 270, -750, 770, -250, 760, -240, 760, -250, 260, -750,
+             260, -760, 760, -250, 270, -750, 250, -750, 760, -250, 260, -750,
+             260, -740, 260, -760, 260]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_speed4
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -760, 760, -250, 260, -740, 780, -240, 280, -750, 780, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -240, 260, -750,
+             260, -750, 780, -240, 280, -730, 770, -250, 260, -760, 270, -730,
+             270, -750, 260, -760, 260, -750, 760, -260, 250, -750, 770, -240,
+             260, -750, 770, -240, 270, -740, 780, -240, 280, -750, 250, -740,
+             780, -240, 280, -740, 280]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_speed5
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -740, 770, -240, 270, -750, 780, -240, 280, -750, 750, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 780, -240, 270, -750, 760, -240, 280, -750, 260, -740,
+             280, -740, 270, -740, 270, -740, 770, -220, 770, -240, 780, -240,
+             760, -250, 760, -250, 770, -250, 260, -750, 760, -240, 280, -750,
+             760, -240, 780, -240, 260]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_speed6
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [280, -740, 770, -240, 280, -750, 750, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 770, -240, 280, -750, 750, -240, 280, -740, 270, -750,
+             270, -740, 260, -760, 260, -760, 760, -240, 760, -240, 280, -750,
+             260, -750, 770, -240, 770, -240, 770, -250, 260, -760, 270, -730,
+             770, -260, 770, -250, 270]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_f
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [260, -750, 760, -240, 260, -760, 760, -240, 250, -770, 770, -240,
+             750, -270, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 780, -240, 250, -760, 760, -240, 250, -770, 250, -740,
+             280, -740, 250, -770, 250, -770, 250, -760, 750, -240, 270, -760,
+             250, -750, 780, -240, 250, -770, 250, -750, 280, -740, 770, -240,
+             250, -770, 250, -770, 250]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_r
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -750, 770, -220, 260, -740, 780, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -740, 780, -240, 280, -730, 770, -250, 270, -750, 260, -750,
+             270, -750, 260, -760, 760, -240, 270, -740, 270, -750, 250, -770,
+             770, -260, 780, -230, 280, -730, 760, -240, 280, -750, 770, -240,
+             780, -240, 760, -250, 270]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_a_wave
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -760, 760, -240, 260, -750, 780, -240, 250, -760, 760, -240,
+             770, -250, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -770, 760, -240, 280, -750, 760, -240, 280, -740, 260, -760,
+             260, -750, 250, -750, 770, -250, 260, -750, 780, -240, 260, -750,
+             760, -240, 780, -240, 760, -240, 260, -750, 260, -750, 780, -240,
+             750, -270, 260, -750, 260]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_fanoff
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -740, 770, -240, 270, -750, 770, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 260, -770, 250, -740, 780, -240, 780, -240,
+             260, -760, 760, -240, 270, -740, 260, -760, 260, -760, 760, -240,
+             770, -240, 260, -760, 770, -240, 270, -760, 760, -260, 770, -250,
+             270, -750, 260, -760, 260, -740, 270, -760, 270, -760, 250, -750,
+             780, -240, 780, -240, 260]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_f
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -740, 780, -240, 260, -750, 760, -240, 280, -740, 760, -240,
+             780, -240, 260, -750, 260, -750, 260, -740, 780, -240, 780, -240,
+             260, -750, 760, -240, 280, -760, 270, -730, 270, -760, 760, -270,
+             760, -260, 250, -750, 260, -750, 260, -750, 770, -250, 270, -750,
+             270, -750, 270, -760, 770, -240, 250, -770, 760, -240, 280, -750,
+             260, -750, 270, -750, 270]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_r
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -740, 790, -220, 280, -740, 760, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 260, -770, 250, -740, 780, -240, 780, -240,
+             260, -750, 760, -240, 280, -750, 250, -740, 280, -740, 780, -240,
+             780, -240, 260, -760, 760, -240, 270, -730, 270, -750, 270, -740,
+             770, -240, 270, -750, 760, -240, 780, -250, 770, -250, 260, -750,
+             760, -240, 780, -240, 260]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_wave
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [280, -740, 780, -240, 270, -750, 760, -240, 280, -740, 760, -240,
+             780, -250, 260, -750, 260, -760, 260, -750, 770, -240, 780, -240,
+             260, -750, 760, -240, 280, -750, 260, -750, 270, -740, 780, -240,
+             780, -240, 260, -750, 760, -240, 280, -750, 760, -240, 280, -740,
+             760, -240, 780, -250, 260, -750, 760, -240, 780, -240, 760, -250,
+             770, -250, 760, -270, 270]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  # Remote B Speed 1-6, final table (resolved 2026-08-18):
+  #
+  # Speed 2-6 were first captured from a single 1->2->3->4->5->6 up-press
+  # sequence (captures/remoteB_speedup_*_raw.txt), which appeared to have a
+  # collision: press 3 ("3->4") and press 2 ("2->3") both decoded to the same
+  # button_id 0x6E. Direct re-captures of Speed 4 and Speed 6
+  # (captures/remoteB_speed{4,6}_recapture_raw.txt) resolved this: press 3 in
+  # the original sequence never actually advanced the fan (a dropped/bounced
+  # press on the physical remote, or the fan ignored a duplicate command) —
+  # so the whole sequence after it was shifted by one step. The corrected
+  # level -> button_id table, cross-checked against the direct re-captures:
+  #   Level 1: 0x68 (captures/remoteB_speed1_raw.txt)
+  #   Level 2: 0x69 (original sequence, press 1, unambiguous)
+  #   Level 3: 0x6E (original sequence, press 2, unambiguous)
+  #   Level 4: 0x65 (confirmed by direct re-capture; the original sequence's
+  #             press 4 also decoded to this, once you account for the shift)
+  #   Level 5: 0x67 (the original sequence's press 5 decoded to this; not
+  #             independently re-captured, but it's the only slot left and is
+  #             consistent with the shift)
+  #   Level 6: 0x66 (confirmed by direct re-capture; matches the original
+  #             session's earlier "already at max" capture from
+  #             parsed_results.md exactly)
+  #
+  # NOTE — button_id 0x68 (Speed 1) is also shared by the old "Speed Down
+  # (level unknown)" capture AND the earlier-captured "R" (reverse) button
+  # (see send_b_r above). The same pattern shows up on Remote A (R's
+  # button_id 0x08 == Speed Level 1's 0x08). Seeing it on BOTH remotes
+  # independently makes this look like a real, systematic collision rather
+  # than a decode fluke — i.e. R and Speed 1 may genuinely share a code on
+  # this fan family. If pressing "Fan B Reverse" actually sets the fan to
+  # speed 1 instead of reversing it, that confirms it — still unconfirmed
+  # against the real fan.
+  - id: send_b_speed1
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [280, -750, 770, -230, 270, -760, 760, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 260, -750, 250, -750, 780, -240, 780, -240,
+             260, -750, 760, -240, 280, -750, 260, -770, 250, -740, 780, -240,
+             780, -240, 260, -760, 770, -250, 270, -730, 280, -750, 270, -750,
+             270, -740, 770, -240, 270, -750, 760, -240, 280, -750, 760, -240,
+             280, -740, 760, -270, 260]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_speed2
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -750, 770, -240, 270, -750, 780, -240, 280, -750, 760, -240,
+             780, -240, 260, -760, 260, -750, 260, -750, 770, -240, 780, -240,
+             260, -750, 760, -240, 280, -750, 250, -740, 280, -740, 780, -240,
+             780, -240, 260, -750, 760, -240, 270, -750, 260, -750, 780, -240,
+             280, -750, 250, -770, 250, -740, 270, -750, 270, -750, 250, -760,
+             250, -750, 770, -240, 280]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_speed3
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [280, -750, 770, -240, 280, -750, 760, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 270, -730, 270, -750, 770, -260, 770, -250,
+             260, -750, 760, -250, 270, -750, 260, -760, 250, -750, 770, -250,
+             770, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -770, 260, -750, 270, -750, 780, -240, 280, -750, 760, -240,
+             780, -240, 760, -270, 240]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_speed4
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -750, 770, -240, 280, -740, 760, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 260, -770, 250, -740, 780, -240, 780, -240,
+             260, -750, 760, -240, 280, -750, 260, -750, 270, -740, 770, -240,
+             780, -220, 270, -750, 260, -740, 780, -240, 280, -730, 770, -250,
+             280, -750, 270, -760, 270, -740, 270, -740, 780, -240, 780, -240,
+             280, -740, 780, -240, 260]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_speed5
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -750, 770, -240, 270, -750, 780, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 260, -750, 280, -750, 770, -240, 780, -240,
+             260, -750, 760, -240, 280, -750, 260, -770, 250, -740, 780, -240,
+             780, -240, 260, -750, 260, -750, 780, -240, 780, -240, 760, -250,
+             770, -250, 770, -250, 770, -250, 770, -250, 270, -750, 280, -750,
+             250, -750, 270, -740, 280]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+  - id: send_b_speed6
+    parameters:
+      repeat_count: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [270, -760, 770, -240, 270, -740, 760, -240, 280, -750, 760, -240,
+             780, -240, 260, -750, 260, -760, 270, -740, 780, -240, 780, -240,
+             260, -750, 760, -240, 280, -740, 260, -750, 270, -750, 780, -240,
+             780, -240, 260, -750, 260, -760, 760, -240, 770, -250, 260, -750,
+             270, -750, 270, -760, 770, -240, 770, -260, 760, -250, 760, -250,
+             260, -750, 760, -260, 260]
+          repeat:
+            times: !lambda 'return repeat_count;'
+            wait_time: 8ms
+
+button:
+  - platform: template
+    name: "Fan A Off"
+    on_press:
+      - script.execute:
+          id: send_a_fanoff
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Speed 1"
+    on_press:
+      - script.execute:
+          id: send_a_speed1
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Speed 2"
+    on_press:
+      - script.execute:
+          id: send_a_speed2
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Speed 3"
+    on_press:
+      - script.execute:
+          id: send_a_speed3
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Speed 4"
+    on_press:
+      - script.execute:
+          id: send_a_speed4
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Speed 5"
+    on_press:
+      - script.execute:
+          id: send_a_speed5
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Speed 6"
+    on_press:
+      - script.execute:
+          id: send_a_speed6
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Forward (F)"
+    on_press:
+      - script.execute:
+          id: send_a_f
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Reverse (R)"
+    on_press:
+      - script.execute:
+          id: send_a_r
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan A Breeze (≈)"
+    on_press:
+      - script.execute:
+          id: send_a_wave
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Off"
+    on_press:
+      - script.execute:
+          id: send_b_fanoff
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Forward (F)"
+    on_press:
+      - script.execute:
+          id: send_b_f
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Reverse (R)"
+    on_press:
+      - script.execute:
+          id: send_b_r
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Breeze (≈)"
+    on_press:
+      - script.execute:
+          id: send_b_wave
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Speed 2"
+    on_press:
+      - script.execute:
+          id: send_b_speed2
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Speed 3"
+    on_press:
+      - script.execute:
+          id: send_b_speed3
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Speed 4"
+    on_press:
+      - script.execute:
+          id: send_b_speed4
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Speed 5"
+    on_press:
+      - script.execute:
+          id: send_b_speed5
+          repeat_count: 6
+
+  - platform: template
+    name: "Fan B Speed 6"
+    on_press:
+      - script.execute:
+          id: send_b_speed6
+          repeat_count: 6
+
+# -----------------------------------------------------------------------------
+# CAUTION — the F / R / ≈ buttons above (both remotes) and Remote B's Fan Off
+# come from captures/parsed_results.md's "2026-08-18 batch". Each is a
+# **single capture** (one button press), not the 3-short-press pattern
+# CAPTURE_PLAN.md's protocol calls for to rule out noise/rolling-code
+# artifacts. Remote A's R and Remote B's R also decode to a button_id that
+# collides with an unrelated button (Speed Level 1 on each remote,
+# respectively) — likely a real, systematic collision (see the note above
+# send_b_speed1), but still unconfirmed against the real fan. Re-capture each
+# 2 more times before trusting these in production; if the real fan doesn't
+# respond correctly to Forward/Reverse/Breeze, this is the first place to
+# check.
+#
+# Remote B's Speed 1-6 table is now complete (see the note above
+# send_b_speed1 for how the original 2->3/3->4 collision got resolved via
+# direct re-captures) but still only single-sample per level except for
+# levels 4 and 6 — worth a down-transition (6->1) cross-validation pass like
+# Remote A got, for full confidence.
+#
+# TODO: still needed — Power/Light/1H/4H/8H for both remotes — see
+# CAPTURE_PLAN.md Step 5 for the full matrix.
+#
+# Once captured, add a script + button pair following the exact pattern above
+# — do NOT invent placeholder pulse values.
+#
+# Possible future improvement: replace the 7 separate speed buttons above with
+# a proper `fan:` platform template entity (single slider, speed_count: 6) once
+# the exact current ESPHome template fan action syntax has been verified —
+# not done here to avoid guessing at unverified YAML syntax. See the answer
+# given to the "dropdown or slider" question in chat: ESPHome's template
+# `fan:` platform (with `speed_count`) is the right primitive for this, but
+# wiring it up needs its own verification pass rather than guessing at syntax
+# inline here.
+# -----------------------------------------------------------------------------

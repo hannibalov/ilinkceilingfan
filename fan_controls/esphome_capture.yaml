@@ -1,0 +1,37 @@
+# Dedicated capture firmware for the receiver ESP32.
+# Flash this to the ESP with the 433 MHz receiver module on GPIO27.
+#
+# Usage:
+#   python3 -m esphome run esphome_capture.yaml --device /dev/cu.YOUR_ESP_PORT
+#
+# Hold a remote button for ~2 seconds and watch the ESPHome log for raw pulse
+# sequences. Compare identical frames across a burst to extract ground-truth
+# timings (see CAPTURE_PLAN.md).
+
+esphome:
+  name: fan-capture
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+
+api:
+
+wifi:
+  ssid: "SercommDB48"
+  password: "SFUGQZUBB9EYBZ"
+
+remote_receiver:
+  - id: my_rx
+    pin:
+      number: GPIO27
+      inverted: false
+    dump: raw
+    tolerance: 25%
+    buffer_size: 10kb
+    filter: 100us
+    idle: 10ms

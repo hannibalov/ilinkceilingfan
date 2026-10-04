@@ -1,0 +1,127 @@
+# Standalone bench-test firmware: no Home Assistant needed. Cycles through
+# Fan Off -> Speed Down (tap) -> Speed Up -> repeat, once every second, so you
+# can point the CC1101 antenna at the fan and watch/listen for a reaction
+# without touching a UI.
+#
+# Same CC1101 wiring as esphome_test.yaml (see README.md "CC1101 Migration
+# Plan"). Codes are the confirmed captures from captures/parsed_results.md.
+#
+# Usage:
+#   python3 -m esphome run esphome_test_loop.yaml --device /dev/cu.YOUR_ESP_PORT
+#   python3 -m esphome logs esphome_test_loop.yaml
+#
+# Each burst (6 repeats x 65 pulses + ~8ms inter-repeat gaps) takes roughly
+# 200-250ms, so a 1s cycle leaves comfortable margin — each button fires
+# once every 3s in the round-robin.
+
+esphome:
+  name: fan-test-loop
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+
+wifi:
+  ssid: "SercommDB48"
+  password: "SFUGQZUBB9EYBZ"
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+  miso_pin: GPIO19
+
+cc1101:
+  cs_pin: GPIO5
+  frequency: 433.92MHz
+  modulation_type: ASK/OOK
+  # Do NOT add gdo0_pin here — see esphome/esphome#16876, same note as
+  # esphome_test.yaml.
+
+remote_transmitter:
+  - id: my_tx
+    pin: GPIO4  # CC1101 GDO0
+    carrier_duty_percent: 100%
+    non_blocking: true
+    on_transmit:
+      then:
+        - cc1101.begin_tx
+    on_complete:
+      then:
+        - cc1101.begin_rx
+
+globals:
+  - id: loop_step
+    type: int
+    restore_value: false
+    initial_value: '0'
+
+script:
+  - id: send_a_fanoff
+    then:
+      - logger.log: "TX: Fan A Off"
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [250, -750, 770, -250, 260, -750, 770, -240, 270, -750, 760, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 780, -240, 260, -760, 760, -240, 280, -750, 260, -740,
+             270, -750, 260, -760, 770, -230, 260, -760, 770, -240, 780, -240,
+             260, -750, 760, -240, 780, -240, 260, -750, 760, -240, 770, -250,
+             760, -250, 760, -250, 270]
+          repeat:
+            times: 6
+            wait_time: 8ms
+
+  - id: send_a_speeddown_tap
+    then:
+      - logger.log: "TX: Fan A Speed Down (tap)"
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [260, -750, 770, -250, 260, -750, 770, -240, 270, -740, 760, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -750, 780, -240, 280, -750, 760, -240, 280, -740, 260, -760,
+             250, -750, 270, -740, 770, -240, 250, -770, 250, -750, 270, -750,
+             250, -770, 250, -770, 250, -770, 240, -770, 750, -250, 270, -770,
+             760, -240, 280, -750, 260]
+          repeat:
+            times: 6
+            wait_time: 8ms
+
+  - id: send_a_speedup
+    then:
+      - logger.log: "TX: Fan A Speed Up"
+      - remote_transmitter.transmit_raw:
+          transmitter_id: my_tx
+          code:
+            [260, -760, 770, -250, 260, -750, 770, -240, 260, -750, 780, -240,
+             780, -240, 260, -750, 760, -240, 780, -240, 760, -250, 260, -750,
+             260, -740, 760, -250, 270, -740, 760, -240, 270, -740, 260, -750,
+             260, -750, 250, -760, 250, -770, 760, -240, 770, -240, 280, -740,
+             260, -750, 270, -740, 250, -770, 250, -770, 250, -770, 760, -230,
+             270, -760, 260, -760, 250]
+          repeat:
+            times: 6
+            wait_time: 8ms
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          switch (id(loop_step)) {
+            case 0:
+              id(send_a_fanoff).execute();
+              break;
+            case 1:
+              id(send_a_speeddown_tap).execute();
+              break;
+            case 2:
+              id(send_a_speedup).execute();
+              break;
+          }
+          id(loop_step) = (id(loop_step) + 1) % 3;

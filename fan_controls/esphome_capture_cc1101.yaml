@@ -1,0 +1,58 @@
+# Dedicated capture firmware for the receiver ESP32, using the CC1101
+# transceiver instead of the old FS1000A-class receiver module.
+#
+# Wiring (see README.md "CC1101 Migration Plan"):
+#   CC1101 VCC  -> ESP32 3V3   (NOT 5V)
+#   CC1101 GND  -> ESP32 GND
+#   CC1101 SCK  -> ESP32 GPIO18
+#   CC1101 MISO -> ESP32 GPIO19
+#   CC1101 MOSI -> ESP32 GPIO23
+#   CC1101 CSN  -> ESP32 GPIO5
+#   CC1101 GDO2 -> ESP32 GPIO2   (RX data — this is the only GDO pin we need
+#                                 for capture; GDO0 is TX-only, unused here)
+#
+# Usage:
+#   python3 -m esphome run esphome_capture_cc1101.yaml --device /dev/cu.YOUR_ESP_PORT
+#
+# Hold a remote button for ~2 seconds and watch the ESPHome log for raw pulse
+# sequences (same procedure as esphome_capture.yaml — see CAPTURE_PLAN.md).
+# Feed the "Received Raw: ..." lines into tools/parse_capture.py to get a
+# clean, noise-free pulse array.
+
+esphome:
+  name: fan-capture-cc1101
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+
+api:
+
+wifi:
+  ssid: "SercommDB48"
+  password: "SFUGQZUBB9EYBZ"
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+  miso_pin: GPIO19
+
+cc1101:
+  cs_pin: GPIO5
+  frequency: 433.92MHz
+  modulation_type: ASK/OOK
+
+remote_receiver:
+  - id: my_rx
+    pin:
+      number: GPIO2
+      inverted: false
+    dump: raw
+    tolerance: 25%
+    buffer_size: 10kb
+    filter: 100us
+    idle: 10ms
